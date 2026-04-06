@@ -1,8 +1,6 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
 import warnings
@@ -17,9 +15,9 @@ st.set_page_config(
 @st.cache_resource
 def load_and_train_model():
 
-    # Load both sheets
-    customer_df = pd.read_excel('Bank_churn_Customer_info.xlsx')
-    account_df = pd.read_excel('Bank_churn_Account_info.xlsx')
+    # Load both files
+    customer_df = pd.read_excel('Bank_churn_Customer_info_sample.xlsx')
+    account_df = pd.read_excel('Bank_churn_Account_info_sample.xlsx')
 
     # Clean EstimatedSalary — remove € symbol
     customer_df['EstimatedSalary'] = customer_df['EstimatedSalary'].astype(str).str.replace('€','').str.replace(',','').str.strip()
@@ -37,38 +35,40 @@ def load_and_train_model():
     account_df = account_df.drop_duplicates(subset='CustomerId')
     customer_df = customer_df.drop_duplicates(subset='CustomerId')
 
-    # Merge
+    # Merge on CustomerId
     df = pd.merge(customer_df, account_df, on='CustomerId', how='inner')
 
     # Drop unnecessary columns
     df = df.drop(['CustomerId', 'Surname'], axis=1)
 
-    # Drop rows with missing values
-    df = df.dropna()
-
-    # Clean Geography — standardise
-    df['Geography'] = df['Geography'].str.strip().str.upper()
-    geo_map = {'FRA': 'France', 'FRANCE': 'France',
-               'SPAIN': 'Spain', 'ESP': 'Spain',
-               'GERMANY': 'Germany', 'GER': 'Germany', 'DEU': 'Germany'}
-    df['Geography'] = df['Geography'].map(geo_map).fillna(df['Geography'])
-
-    # Clean Gender
-    df['Gender'] = df['Gender'].str.strip().str.title()
-
-    # Drop Tenure_y if duplicate after merge
+    # Handle duplicate Tenure columns after merge
     if 'Tenure_x' in df.columns:
         df = df.rename(columns={'Tenure_x': 'Tenure'})
     if 'Tenure_y' in df.columns:
         df = df.drop('Tenure_y', axis=1)
 
-    # Encode categorical
+    # Drop missing values
+    df = df.dropna()
+
+    # Clean Geography
+    df['Geography'] = df['Geography'].astype(str).str.strip()
+    geo_map = {
+        'FRA': 'France', 'FRANCE': 'France', 'FRENCH': 'France', 'French': 'France', 'fra': 'France',
+        'SPAIN': 'Spain', 'ESP': 'Spain', 'Spain': 'Spain',
+        'GERMANY': 'Germany', 'GER': 'Germany', 'DEU': 'Germany', 'Germany': 'Germany'
+    }
+    df['Geography'] = df['Geography'].map(geo_map).fillna(df['Geography'])
+
+    # Clean Gender
+    df['Gender'] = df['Gender'].astype(str).str.strip().str.title()
+
+    # Encode categorical columns
     le_geo = LabelEncoder()
     le_gen = LabelEncoder()
     df['Geography_encoded'] = le_geo.fit_transform(df['Geography'])
     df['Gender_encoded'] = le_gen.fit_transform(df['Gender'])
 
-    # Store unique values for dropdowns
+    # Store classes for dropdowns
     geo_classes = list(le_geo.classes_)
     gen_classes = list(le_gen.classes_)
 
@@ -80,7 +80,7 @@ def load_and_train_model():
     X = df[features]
     y = df['Exited']
 
-    # Scale
+    # Scale features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
@@ -95,8 +95,8 @@ def load_and_train_model():
 
     return model, scaler, le_geo, le_gen, geo_classes, gen_classes
 
-# Load model
-with st.spinner("Training model... please wait"):
+# Load and train
+with st.spinner("Loading model... please wait"):
     model, scaler, le_geo, le_gen, geo_classes, gen_classes = load_and_train_model()
 
 # UI
@@ -123,7 +123,7 @@ is_active = st.radio("Is Active Member?", ["Yes", "No"], horizontal=True)
 
 st.divider()
 
-if st.button("Predict Churn", use_container_width=True, type="primary"):
+if st.button("🔮 Predict Churn", use_container_width=True, type="primary"):
 
     geo_encoded = le_geo.transform([geography])[0]
     gen_encoded = le_gen.transform([gender])[0]
@@ -137,7 +137,6 @@ if st.button("Predict Churn", use_container_width=True, type="primary"):
     ]])
 
     input_scaled = scaler.transform(input_data)
-
     prediction = model.predict(input_scaled)[0]
     probability = model.predict_proba(input_scaled)[0]
 
@@ -145,13 +144,13 @@ if st.button("Predict Churn", use_container_width=True, type="primary"):
 
     if prediction == 1:
         churn_prob = round(probability[1] * 100, 1)
-        st.error(f"⚠️ This customer is likely to CHURN")
-        st.metric("Churn Probability", f"{churn_prob}%")
+        st.error("⚠️ This customer is likely to CHURN")
+        st.metric("Churn Probability", f"{churn_prob:.1f}%")
         st.markdown("**Recommended Action:** Contact this customer with a retention offer immediately.")
     else:
         stay_prob = round(probability[0] * 100, 1)
-        st.success(f"✅ This customer is likely to STAY")
-        st.metric("Retention Probability", f"{stay_prob}%")
+        st.success("✅ This customer is likely to STAY")
+        st.metric("Retention Probability", f"{stay_prob:.1f}%")
         st.markdown("**Status:** Low churn risk. No immediate action required.")
 
     with st.expander("View Input Summary"):
@@ -167,4 +166,3 @@ if st.button("Predict Churn", use_container_width=True, type="primary"):
 
 st.divider()
 st.caption("Built by Shiny Madona Arockiasamy | IBM Certified Data Scientist | github.com/shinymadona")
-
