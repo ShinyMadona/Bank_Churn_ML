@@ -1,3 +1,5 @@
+https://bankchurnml-plbplrsg2zhasqetwze8de.streamlit.app
+
 # Bank Customer Churn Prediction
 
 A machine learning project that predicts whether a bank customer is likely to **churn** based on demographic, financial, and account-related features.  
